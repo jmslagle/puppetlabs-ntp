@@ -12,7 +12,7 @@ describe 'ntp' do
   describe 'test platform specific resources' do
 
     debianish = ['debian', 'ubuntu']
-    redhatish = ['centos', 'redhat', 'oel', 'linux']
+    redhatish = ['centos', 'redhat', 'oel', 'linux', 'scientific']
     bsdish    = ['freebsd']
 
     debianish.each do |os|
