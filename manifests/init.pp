@@ -1,129 +1,33 @@
-# Class: ntp
-#
-#   This module manages the ntp service.
-#
-#   Jeff McCune <jeff@puppetlabs.com>
-#   2011-02-23
-#
-#   Tested platforms:
-#    - Debian 6.0 Squeeze
-#    - CentOS 5.4
-#    - Amazon Linux 2011.09
-#    - FreeBSD 9.0
-#
-# Parameters:
-#
-#   $servers = [ '0.debian.pool.ntp.org iburst',
-#                '1.debian.pool.ntp.org iburst',
-#                '2.debian.pool.ntp.org iburst',
-#                '3.debian.pool.ntp.org iburst', ]
-#
-# Actions:
-#
-#  Installs, configures, and manages the ntp service.
-#
-# Requires:
-#
-# Sample Usage:
-#
-#   class { "ntp":
-#     servers    => [ 'time.apple.com' ],
-#     autoupdate => false,
-#   }
-#
-# [Remember: No empty lines between comments and class definition]
-class ntp($servers='UNSET',
-          $ensure='running',
-          $autoupdate=false
-) {
+class ntp(
+  $autoupdate      = $ntp::params::autoupdate,
+  $config          = $ntp::params::config,
+  $config_template = $ntp::params::config_template,
+  $package_ensure  = $ntp::params::package_ensure,
+  $package_name    = $ntp::params::package_name,
+  $panic           = $ntp::params::panic,
+  $restrict        = $ntp::params::restrict,
+  $servers         = $ntp::params::servers,
+  $service_enable  = $ntp::params::service_enable,
+  $service_ensure  = $ntp::params::service_ensure,
+  $service_manage  = $ntp::params::service_manage,
+  $service_name    = $ntp::params::service_name,
+) inherits ntp::params {
 
-  if ! ($ensure in [ 'running', 'stopped' ]) {
-    fail('ensure parameter must be running or stopped')
+  if $autoupdate {
+    notice('autoupdate parameter has been deprecated and replaced with ensure_package.  Set this to latest for the same behavior as autoupdate => true.')
   }
 
-  if $autoupdate == true {
-    $package_ensure = latest
-  } elsif $autoupdate == false {
-    $package_ensure = present
-  } else {
-    fail('autoupdate parameter must be true or false')
-  }
+  include '::ntp::install'
+  include '::ntp::config'
+  include '::ntp::service'
 
-  case $::operatingsystem {
-    debian, ubuntu: {
-      $supported  = true
-      $pkg_name   = [ 'ntp' ]
-      $svc_name   = 'ntp'
-      $config     = '/etc/ntp.conf'
-      $config_tpl = 'ntp.conf.debian.erb'
-      if ($servers == 'UNSET') {
-        $servers_real = [ '0.debian.pool.ntp.org iburst',
-                          '1.debian.pool.ntp.org iburst',
-                          '2.debian.pool.ntp.org iburst',
-                          '3.debian.pool.ntp.org iburst', ]
-      } else {
-        $servers_real = $servers
-      }
-    }
-    centos, redhat, oel, linux, fedora, scientific: {
-      $supported  = true
-      $pkg_name   = [ 'ntp' ]
-      $svc_name   = 'ntpd'
-      $config     = '/etc/ntp.conf'
-      $config_tpl = 'ntp.conf.el.erb'
-      if ($servers == 'UNSET') {
-        $servers_real = [ '0.centos.pool.ntp.org',
-                          '1.centos.pool.ntp.org',
-                          '2.centos.pool.ntp.org', ]
-      } else {
-        $servers_real = $servers
-      }
-    }
-    freebsd: {
-      $supported  = true
-      $pkg_name   = ['.*/net/ntp']
-      $svc_name   = 'ntpd'
-      $config     = '/etc/ntp.conf'
-      $config_tpl = 'ntp.conf.freebsd.erb'
-      if ($servers == 'UNSET') {
-        $servers_real = [ '0.freebsd.pool.ntp.org iburst maxpoll 9',
-                          '1.freebsd.pool.ntp.org iburst maxpoll 9',
-                          '2.freebsd.pool.ntp.org iburst maxpoll 9',
-                          '3.freebsd.pool.ntp.org iburst maxpoll 9', ]
-      } else {
-        $servers_real = $servers
-      }
-    }
-    default: {
-      $supported = false
-      notify { "${module_name}_unsupported":
-        message => "The ${module_name} module is not supported on ${::operatingsystem}",
-      }
-    }
-  }
+  # Anchor this as per #8140 - this ensures that classes won't float off and
+  # mess everything up.  You can read about this at:
+  # http://docs.puppetlabs.com/puppet/2.7/reference/lang_containment.html#known-issues
+  anchor { 'ntp::begin': }
+  anchor { 'ntp::end': }
 
-  if ($supported == true) {
+  Anchor['ntp::begin'] -> Class['::ntp::install'] -> Class['::ntp::config']
+    ~> Class['::ntp::service'] -> Anchor['ntp::end']
 
-    package { 'ntp':
-      name   =>  $pkg_name,
-      ensure => $package_ensure,
-    }
-
-    file { $config:
-      ensure  => file,
-      owner   => 0,
-      group   => 0,
-      mode    => '0644',
-      content => template("${module_name}/${config_tpl}"),
-      require => Package[$pkg_name],
-    }
-
-    service { 'ntp':
-      ensure     => $ensure,
-      name       => $svc_name,
-      hasstatus  => true,
-      hasrestart => true,
-      subscribe  => [ Package[$pkg_name], File[$config] ],
-    }
-  }
 }
